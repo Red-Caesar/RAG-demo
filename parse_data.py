@@ -6,14 +6,17 @@ def get_contexts(path: str) -> List[str]:
         data = json.load(read_file)["data"]
     contexts = []
     for task in data:
-        contexts.append(task["paragraphs"][0]["context"])
+        is_impossible = task["paragraphs"][0]["qas"][0]["is_impossible"]
+        if not is_impossible: 
+            contexts.append(task["paragraphs"][0]["context"])
 
     return contexts
 
-def get_qa(path: str) -> List[Dict[str, str]]:
+def get_qa(path: str, limit: int=None) -> List[Dict[str, str]]:
     with open(path, "r") as read_file:
         data = json.load(read_file)["data"]
     qa = []
+
     for task in data:
         is_impossible = task["paragraphs"][0]["qas"][0]["is_impossible"]
         if not is_impossible:
