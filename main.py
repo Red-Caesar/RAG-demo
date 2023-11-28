@@ -1,38 +1,33 @@
 import os
 import uuid
-import pickle
 from tqdm import tqdm
-from typing import List, Dict
 
-from langchain.llms import OpenAI
 from langchain.llms.octoai_endpoint import OctoAIEndpoint
-from langchain.embeddings.octoai_embeddings import OctoAIEmbeddings
+from langchain.embeddings.sentence_transformer import SentenceTransformerEmbeddings
 from llama_index.schema import Document
-from llama_index.embeddings import LangchainEmbedding
 from llama_index import (
     LLMPredictor,
     ServiceContext,
-    download_loader,
     GPTVectorStoreIndex,
-    VectorStoreIndex,
-    PromptHelper,
 )
 
-from langchain.chat_models import ChatOllama
-
-
 from parse_data import get_contexts, get_qa
+from dotenv import load_dotenv
 
-# print("TOKEN", os.environ["OCTOAI_API_KEY"])
-octoai_api_token = os.environ.get("OCTOAI_API_KEY"),
-endpoint_url = "https://ollm-deploy-for-downstream-actions-ucxl30slhvyv.octoai.run/v1/chat/completions"
-# endpoint_url =  https://llama-2-7b-chat-demo-kk0powt97tmb.octoai.run/v1/chat/completions
-model_name = "llama-2-7b-chat"
+dotenv_path = os.path.join(os.getcwd(), '.env')
+load_dotenv(dotenv_path)
+
+token = os.environ["OCTOAI_TOKEN"]
+endpoint = os.environ["ENDPOINT"]
+model_name = "llama-2-13b-chat-fp16"
+
 qa = get_qa("datasets/triviaqa_train.json")[:10]
+contexts = get_contexts("datasets/triviaqa_train.json")[:10]
 
-def get_language_model(endpoint_url: str, model_name: str):
+def get_language_model(model_name: str):
     llm = OctoAIEndpoint(
-        endpoint_url=endpoint_url,
+        endpoint_url=endpoint,
+        octoai_api_token=token,
         model_kwargs={
             "model": model_name,
             "messages": [
@@ -41,42 +36,31 @@ def get_language_model(endpoint_url: str, model_name: str):
                     "content": "Below is an instruction that describes a task. Write an answer in one word.",
                 }
             ],
-            "stream": True,
+            "stream": False,
             "max_tokens": 256,
         },
     )
     return llm
 
-def evaluate():
-    pass
-
-def get_RAG_acc(octoai_api_token: str, endpoint_url: str, qa: List[Dict[str, str]]) -> float:
+def get_RAG_acc() -> float:
     
-    # llm_llama2_7b = get_language_model(endpoint_url, "llama-2-7b-chat")
-    # llm_llama2_7b = ChatOllama(model="llama2:7b-chat")
+    llm_llama2_13b = get_language_model(model_name)
+    llm_predictor = LLMPredictor(llm=llm_llama2_13b)
 
-    # llm_predictor = LLMPredictor(llm=llm_llama2_7b)
-
-    embeddings = LangchainEmbedding(
-        OctoAIEmbeddings(
-            endpoint_url="https://instructor-large-f1kzsig6xes9.octoai.run/predict"
-        )
-    )
+    embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
     service_context = ServiceContext.from_defaults(
-        llm_predictor=llm_predictor, chunk_size_limit=512, embed_model=embeddings,
+        llm_predictor=llm_predictor, chunk_size_limit=512, embed_model=embedding_function,
     )
 
-    texts = get_contexts("datasets/triviaqa_train.json")[:10]
-    doc_ids = [str(uuid.uuid4()) for _ in texts]
-    documents = [ Document(text=s, metadata={"doc_id": doc_ids[i]}) for i, s in enumerate(texts)]
+    doc_ids = [str(uuid.uuid4()) for _ in contexts]
+    documents = [ Document(text=s, metadata={"doc_id": doc_ids[i]}) for i, s in enumerate(contexts)]
+
     print("Start create index store")
     index = GPTVectorStoreIndex.from_documents(
         documents, service_context=service_context
     )
     print("Finish create index store")
-    with open('GPTVectorStoreIndex.pkl', 'wb') as file: 
-        pickle.dump(index, file) 
 
     query_engine = index.as_query_engine(llm_predictor=llm_predictor)
     
@@ -85,9 +69,9 @@ def get_RAG_acc(octoai_api_token: str, endpoint_url: str, qa: List[Dict[str, str
         prompt, answer = element["question"], element["answer"]
 
         response = query_engine.query(prompt)
-        acc += (response == answer)
+        acc += (answer.lower() in str(response).lower())
     
     return acc / len(qa)
 
-llm_llama2_7b_acc = get_RAG_acc(octoai_api_token, endpoint_url, qa)
-print(llm_llama2_7b_acc)
+llm_llama2_13b_acc = get_RAG_acc()
+print(llm_llama2_13b_acc)
