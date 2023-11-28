@@ -1,4 +1,3 @@
-
 import openai
 OPENAI_VER_MAJ = int(openai.__version__.split(".")[0])
 if OPENAI_VER_MAJ >= 1:
@@ -57,3 +56,4 @@ def run_chat_completion(
         return completion.model_dump(exclude_unset=True)
     else:
         return completion
+    
