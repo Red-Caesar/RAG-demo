@@ -2,3 +2,7 @@ langchain
 llama_index
 octoai-sdk
 tqdm
+python-dotenv
+pypdf
+sentence-transformers
+chromadb
